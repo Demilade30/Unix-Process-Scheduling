@@ -1,9 +1,9 @@
 # Project 4: Process Scheduling
 
 
-Name:	Divine Akinjiyan
-VCS:	git
-Date:	04/04/2023
+* Name:	Divine Akinjiyan
+* VCS:	git
+* Date:	04/04/2023
 
 # Files
 	oss.c - the main program
