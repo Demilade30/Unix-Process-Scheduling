@@ -1,18 +1,16 @@
-CC = gcc
-CFLAGS =- Wall -Werror -02 -g
-OBJ = oss.o worker.o
-DEPS = oss.c worker.c
+CC=gcc
+CFLAGS=-Wall -Werror -O2 -g
+OBJ= oss.o user.o
+DEPS= oss.c user.c
 
-all: oss worker
+all: oss user
 
 %.o: %.c $(DEPS)
 	$(CC) $(CFLAGS) -c -o $@ $<
-
 oss: $(OBJ)
 	$(CC) $(CFLAGS) -lm -o $@ $@.o
 
-worker: $(OBJ)
+user: $(OBJ)
 	$(CC) $(CFLAGS) -lm -o $@ $@.o
-
 clean:
-	rm -rf oss worker *.log *.o
+	rm -rf oss user *.log *.o 
