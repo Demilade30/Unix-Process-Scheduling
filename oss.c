@@ -559,7 +559,7 @@ static void checkLog(){
 static void ossSchedule(){
 	while(pReport.usersTerminated < USERS_MAX){
 		advanceTimer();
-		// For April 13
+		// For April 13 when I meet with tuan and play with his cat
 		unblockUsers();
 		if(runChildProcess() == -1) //there isn't any more processes to schedule
 			break;
