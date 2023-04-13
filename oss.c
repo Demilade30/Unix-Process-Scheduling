@@ -236,7 +236,7 @@ static int startUserPCB(){
 	struct userPCB *usr = &shm->users[u]; //allocate process control block for user process
 
 	//generate random to determine if the user process is IO bound or CPU bound
-	const int io_bound = ((rand() % 100) <= IO_BOUND_PROB) ? 1 : 0;
+	//const int io_bound = ((rand() % 100) <= IO_BOUND_PROB) ? 1 : 0;
 
 	const pid_t pid = fork();
 
@@ -247,21 +247,21 @@ static int startUserPCB(){
 			return EXIT_FAILURE;
 			break;
 		case 0: 
-			snprintf(buf, sizeof(buf), "%d", io_bound);
-			execl("./user", "./user", buf, NULL);
+			//snprintf(buf, sizeof(buf), "%d", io_bound);
+			execl("./user", "./user", NULL);
 			fprintf(stderr,"%s: failed to execl.",prog_name);
                         perror("Error");			
 			exit(EXIT_FAILURE);
 			break;
 		default:
 			++pReport.usersStarted;
-			if(io_bound == 1){
-				usr->priority = qHIGH;
-				pReport.c_highprior++;
-			}else{
-				usr->priority = qLOW;
-				pReport.c_lowprior++;
-			}		
+			//if(io_bound == 1){
+				//usr->priority = qHIGH;
+				//pReport.c_highprior++;
+			//}else{
+				//usr->priority = qLOW;
+				//pReport.c_lowprior++;
+			//}		
 		
 			usr->id = next_id++;
 			usr->pid = pid;
@@ -269,17 +269,18 @@ static int startUserPCB(){
 			usr->t_started = shm->clock; //save started time to record system time
 			usr->state = sREADY; //mark process as ready
 			
-			pushQ(qHIGH, u); 
+			pushQ(qREADY, u); 
 			
 			++logLine;
 			printf("OSS: Generating process with PID %u and putting it in queue %d at time %lu:%lu\n",
-           			usr->id, qHIGH, shm->clock.tv_sec, shm->clock.tv_nsec);		
+           			usr->id, qREADY, shm->clock.tv_sec, shm->clock.tv_nsec);		
 			break;	
 	}
 	
 	return EXIT_SUCCESS;
 
 }
+
 static void advanceTimer(){
 	struct timespec t = {.tv_sec = 0, .tv_nsec = 500000000}; //amount to update
 
@@ -556,10 +557,9 @@ static void checkLog(){
 	}
 }
 static void ossSchedule(){
-	// To Do:
-	// confirm that the functions should be left the same
 	while(pReport.usersTerminated < USERS_MAX){
 		advanceTimer();
+		// For April 13
 		unblockUsers();
 		if(runChildProcess() == -1) //there isn't any more processes to schedule
 			break;

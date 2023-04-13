@@ -51,7 +51,6 @@ struct queue{
 //define process control block
 struct userPCB{
 	pid_t pid;
-	int priority;
 	unsigned int id;
 	enum state state;
 
