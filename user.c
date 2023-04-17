@@ -48,10 +48,20 @@ static int deallocateSHM(){
         }
 	return 0;
 }
+static void addTime(struct timespec *a, const struct timespec *b){
+	static const unsigned int max_ns = 1000000000;
 
-static void userProcess(const int IObound){
+  	a->tv_sec += b->tv_sec;
+  	a->tv_nsec += b->tv_nsec;
+  	while(a->tv_nsec > max_ns)
+  	{
+    		a->tv_sec++;
+    		a->tv_nsec -= max_ns;
+  	}
+}
+static void userProcess(){
 	int alive = 1;
-	const int io_block_prob = (IObound) ? IO_IO_BLOCK_PROB : CPU_IO_BLOCK_PROB;
+	//const int io_block_prob = (IObound) ? IO_IO_BLOCK_PROB : CPU_IO_BLOCK_PROB;
 	
 	while(alive){
 		struct ossMsg m;
@@ -74,15 +84,25 @@ static void userProcess(const int IObound){
 		if (willTerminate) // terminated successfully
 		{
 			m.timeslice = sTERMINATED;
-			m.clock.tv_nsec = rand() % timeslice;
+			m.clock.tv_nsec = rand() % timeslice + 1;
 			alive = 0;
 		}else{
-			const int will_interrupt = ((rand() % 100) < io_block_prob) ? 1 : 0;
+			const int will_interrupt = ((rand() % 100) < IO_IO_BLOCK_PROB) ? 1 : 0;
 			if (will_interrupt){
-				m.timeslice = sBLOCKED;
-				m.clock.tv_nsec = rand() % timeslice;
-				m.io.tv_sec = rand() % EVENT_R;
-				m.io.tv_nsec = rand() % EVENT_S;
+				int r = rand() % EVENT_R;
+				int s = rand() % EVENT_S;
+				if(r == PREMPT_R){
+					m.timeslice = sREADY;
+					int p = rand() % PREMPT_QUANTUM + 1;
+					int timespend = timeslice / 100 * p;
+					struct timespec temp = {.tv_sec = 0, .tv_nsec = p};
+					addTime(&m.clock, &temp); 					
+				}else{		
+					m.timeslice = sBLOCKED;
+					m.clock.tv_nsec = rand() % timeslice + 1;
+					m.io.tv_sec = r;
+					m.io.tv_nsec = s;
+				}
 			}else{
 				m.timeslice = sREADY;
 				m.clock.tv_nsec = timeslice;
@@ -104,21 +124,20 @@ static void signalHandler(){
 }
 int main(int argc, char** argv){
 	prog_name = argv[0];
-	if (argc != 2)
+	if (argc != 1)
 	{
-		fprintf(stderr, "%s: Please passed in IO bound arguments.\n",prog_name);
+		fprintf(stderr, "%s: Invalid number of arguments.\n",prog_name);
 		return EXIT_FAILURE;
 	}
 	
 	signal(SIGINT, signalHandler);
 		
-	const int IObound = atoi(argv[1]);
-	srand(getpid() + IObound); //seeding off
+	srand(getpid()); //seeding off
 	
 	if(createSHM() == -1)
 		return EXIT_FAILURE;
 	
-	userProcess(IObound);
+	userProcess();
 
 	if(deallocateSHM() == -1)
 		return EXIT_FAILURE;
