@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -9,6 +10,8 @@
 #include <sys/shm.h>
 #include <strings.h>
 #include <signal.h>
+
+int stdout_bkp;
 
 char *log_filename = "logfile.log";
 char *prog_name;
@@ -33,7 +36,7 @@ static unsigned int logLine = 0;
 //define time struct needed in this project
 static const struct timespec maxTimeBetweenNewProcs = {.tv_sec = 2, .tv_nsec = 1000000000};
 static struct timespec next_start = {.tv_sec = 0, .tv_nsec = 0};
-
+static struct timespec t_idle = {.tv_sec = 0, .tv_nsec = 0};
 //set a variable to hold current ready queues
 //static int qREADY = qHIGH; //initialize current ready queue as high-priority queue
 
@@ -80,7 +83,7 @@ static int parseOpt(int argc,char** argv){
       				return -1;
     		}
   	}
-	
+	stdout_bkp = dup(STDOUT_FILENO);	
 	stdout = freopen(log_filename, "w", stdout);
 	if(stdout == NULL){
 		fprintf(stderr,"%s: ",prog_name);
@@ -161,7 +164,7 @@ static void addTime(struct timespec *a, const struct timespec *b){
 
   	a->tv_sec += b->tv_sec;
   	a->tv_nsec += b->tv_nsec;
-  	if (a->tv_nsec > max_ns)
+  	while(a->tv_nsec > max_ns)
   	{
     		a->tv_sec++;
     		a->tv_nsec -= max_ns;
@@ -229,7 +232,6 @@ static int popQ(struct queue *pq, const int pos){
 }
 
 static int startUserPCB(){
-	char buf[10];
 	const int u = getFreeBmap();
 	if(u == -1)
 		return EXIT_SUCCESS;
@@ -428,6 +430,11 @@ static int scheduleRunUser(){
     			printf("OSS: Putting process with PID %u into end of queue %d\n", usr->id, qREADY);
     			pushQ(qREADY, u);
 			
+			dispatch.tv_nsec = rand() % MAXDISPATCH;
+        		addTime(&shm->clock, &dispatch);
+
+			++logLine;
+        		printf("OSS: total time for this operation was %lu nanoseconds\n", dispatch.tv_nsec);			
 			break;
 		case sBLOCKED:
     			usr->state = sBLOCKED;
@@ -462,7 +469,14 @@ static int scheduleRunUser(){
 			++logLine;
     			printf("OSS: Putting process with PID %u into blocked queue %d\n", usr->id, qBLOCKED);
     			pushQ(qBLOCKED, u);
-    			break;	
+ 	               	
+			dispatch.tv_nsec = rand() % MAXDISPATCH;
+                        addTime(&shm->clock, &dispatch);
+
+                        ++logLine;
+                        printf("OSS: total time for this operation was %lu nanoseconds\n", dispatch.tv_nsec);
+
+			break;	
 		case sTERMINATED:
 			usr->state = sTERMINATED;
     			
@@ -483,20 +497,15 @@ static int scheduleRunUser(){
 			++logLine;
     			printf("OSS: Receiving that process with PID %u has terminated\n", usr->id);
 			
-			//TODO: Here
 			clearUserPCB(u);
 			break;
 		default:
 			printf("OSS: Invalid response from user\n");
     			break;
 	}
-	dispatch.tv_nsec = rand() % MAXDISPATCH;
-       	addTime(&shm->clock, &dispatch);
 	return 0;	
 }
 static int runChildProcess(){
-	//static struct timespec t_idle = {.tv_sec = 0, .tv_nsec = 0};
-	static struct timespec t_idle;
 	static struct timespec diff_idle;
 	static int flag = 0;
 
@@ -539,7 +548,7 @@ static int runChildProcess(){
 	//which means both ready queue are empty at the moment
 	if(pq[qREADY].len == 0){
 		++logLine;
-		printf("OSS: No ready process in queue %d at %li:%li\n", qREADYW, shm->clock.tv_sec, shm->clock.tv_nsec);
+		printf("OSS: No ready process in queue %d at %li:%li\n", qREADY, shm->clock.tv_sec, shm->clock.tv_nsec);
 		flag = 1;
 	}else{
 		flag = 0;
@@ -569,8 +578,10 @@ static int runChildProcess(){
 }
 static void checkLog(){
 	if(logLine >= LOG_LINES){
-		printf("OSS: Current log has exceed %d lines (%d lines), the system will terminate now\n",LOG_LINES, logLine);
-		raise(SIGINT);
+		printf("OSS: Current log has exceed %d lines (%d lines)\n",LOG_LINES, logLine);
+		dup2(stdout_bkp, STDOUT_FILENO);
+		close(stdout_bkp);
+		fflush(stdout);
 	}
 }
 static void ossSchedule(){
@@ -587,27 +598,19 @@ static void printReport(){
 	divTime(&pReport.t_cpu, pReport.usersTerminated);
 	divTime(&pReport.t_wait, pReport.usersTerminated);
 	divTime(&pReport.t_sys, pReport.usersTerminated);
-	// To Do:
 	// calculate average block time
-	//divTime(&pReport.t_blocked[qHIGH], pReport.c_highprior);
-	//divTime(&pReport.t_blocked[qLOW], pReport.c_lowprior);
+	divTime(&pReport.t_blocked, pReport.usersTerminated);
 	printf("*****************************************************\n");
 	printf("\t\tSCHEDULING REPORT\n");
 	printf("Processes Statistic:\n");
 	printf("\tNumber of started processes: %d\n", pReport.usersStarted);
 	printf("\tNumber of terminated processes: %d\n", pReport.usersTerminated);
-	//printf("\tNumber of IO bound processes: %d\n", pReport.c_highprior);
-	//printf("\tNumber of CPU bound processes: %d\n", pReport.c_lowprior);
 	printf("\tCPU idle time: %lu:%lu\n",pReport.cpuIdleTime.tv_sec,pReport.cpuIdleTime.tv_nsec);
 	printf("Average Records:\n");
 	printf("\tAverage CPU utilization time: %lu:%lu\n",pReport.t_cpu.tv_sec,pReport.t_cpu.tv_nsec);
 	printf("\tAverage wait time: %lu:%lu\n",pReport.t_wait.tv_sec,pReport.t_wait.tv_nsec);
 	printf("\tAverage time in the system: %lu:%lu\n",pReport.t_sys.tv_sec,pReport.t_sys.tv_nsec);
-	printf("\tAverage blocked time:\n");
-	// To Do:
-	// report average block time
-	//printf("\t\tIO Bound Processes: %lu:%lu\n",pReport.t_blocked[qHIGH].tv_sec,pReport.t_blocked[qHIGH].tv_nsec);
-	//printf("\t\tCPU Bound Processes: %lu:%lu\n",pReport.t_blocked[qLOW].tv_sec,pReport.t_blocked[qLOW].tv_nsec);
+	printf("\tAverage blocked time: %lu:%lu\n",pReport.t_blocked.tv_sec,pReport.t_blocked.tv_nsec);
 	printf("*****************************************************\n");
 }
 static void signalHandler(int sig){

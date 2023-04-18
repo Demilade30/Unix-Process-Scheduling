@@ -95,7 +95,7 @@ static void userProcess(){
 					m.timeslice = sREADY;
 					int p = rand() % PREMPT_QUANTUM + 1;
 					int timespend = timeslice / 100 * p;
-					struct timespec temp = {.tv_sec = 0, .tv_nsec = p};
+					struct timespec temp = {.tv_sec = 0, .tv_nsec = timespend};
 					addTime(&m.clock, &temp); 					
 				}else{		
 					m.timeslice = sBLOCKED;
